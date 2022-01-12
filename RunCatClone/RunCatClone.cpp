@@ -10,8 +10,12 @@
 const wchar_t szClass[] = L"RunCatCloneClass";
 const wchar_t szTitle[] = L"RunCat Clone";
 
+const UINT WM_APP_ANIMATE = WM_APP + 1;
+
 HINSTANCE hInst;
 NOTIFYICONDATA nid;
+
+DWORD dwMilliseconds = 100;
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 
@@ -98,6 +102,34 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 
         nid.uVersion = NOTIFYICON_VERSION_4;
         Shell_NotifyIcon(NIM_SETVERSION, &nid);
+
+        PostMessage(hwnd, WM_APP_ANIMATE, 0, 0);
+        return 0;
+    }
+
+    case WM_APP_ANIMATE:
+    {
+        nid.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_WHITE_CAT_0));
+        Shell_NotifyIcon(NIM_MODIFY, &nid);
+        Sleep(dwMilliseconds);
+
+        nid.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_WHITE_CAT_1));
+        Shell_NotifyIcon(NIM_MODIFY, &nid);
+        Sleep(dwMilliseconds);
+
+        nid.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_WHITE_CAT_2));
+        Shell_NotifyIcon(NIM_MODIFY, &nid);
+        Sleep(dwMilliseconds);
+
+        nid.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_WHITE_CAT_3));
+        Shell_NotifyIcon(NIM_MODIFY, &nid);
+        Sleep(dwMilliseconds);
+
+        nid.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_WHITE_CAT_4));
+        Shell_NotifyIcon(NIM_MODIFY, &nid);
+        Sleep(dwMilliseconds);
+
+        PostMessage(hwnd, WM_APP_ANIMATE, 0, 0);
         return 0;
     }
 
