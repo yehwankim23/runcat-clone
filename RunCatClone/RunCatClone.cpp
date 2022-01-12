@@ -4,6 +4,8 @@
 
 #include <Windows.h>
 #include <strsafe.h>
+#include <sstream>
+#include <iomanip>
 
 #include "resource.h"
 
@@ -16,6 +18,11 @@ HINSTANCE hInst;
 NOTIFYICONDATA nid;
 
 DWORD dwMilliseconds = 100;
+std::wstringstream wss;
+
+UINT64 previousIdleTime = 0;
+UINT64 previousUsedTime = 0;
+double previousPercent = 0;
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 
@@ -128,6 +135,35 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         nid.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_WHITE_CAT_4));
         Shell_NotifyIcon(NIM_MODIFY, &nid);
         Sleep(dwMilliseconds);
+
+        FILETIME idleTime, kernelTime, userTime;
+        double currentPercent = previousPercent;
+
+        if (GetSystemTimes(&idleTime, &kernelTime, &userTime))
+        {
+            UINT64 currentIdleTime
+                = (UINT64)idleTime.dwHighDateTime << 32 | (UINT64)idleTime.dwLowDateTime;
+            UINT64 currentUsedTime
+                = ((UINT64)kernelTime.dwHighDateTime << 32 | (UINT64)kernelTime.dwLowDateTime)
+                + ((UINT64)userTime.dwHighDateTime << 32 | (UINT64)userTime.dwLowDateTime);
+
+            UINT64 idleTimeChange = currentIdleTime - previousIdleTime;
+            UINT64 usedTimeChange = currentUsedTime - previousUsedTime;
+
+            currentPercent = (usedTimeChange - idleTimeChange) * 100.0 / usedTimeChange;
+
+            previousIdleTime = currentIdleTime;
+            previousUsedTime = currentUsedTime;
+        }
+
+        previousPercent = (previousPercent + currentPercent) / 2;
+        dwMilliseconds = static_cast<DWORD>(2000 / (previousPercent + 20));
+
+        wss << std::fixed << std::setprecision(1) << currentPercent;
+        std::wstring wPercent(wss.str());
+        wss.str(L"");
+        wss.clear();
+        StringCchCopy(nid.szTip, ARRAYSIZE(nid.szTip), (wPercent + L"%").c_str());
 
         PostMessage(hwnd, WM_APP_ANIMATE, 0, 0);
         return 0;
