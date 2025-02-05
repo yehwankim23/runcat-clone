@@ -2,68 +2,60 @@
 #define UNICODE
 #endif
 
+#include <thread>
+
 #include <Windows.h>
 #include <strsafe.h>
-#include <sstream>
-#include <iomanip>
 
 #include "resource.h"
 
-const wchar_t szClass[] = L"RunCatCloneClass";
-const wchar_t szTitle[] = L"RunCat Clone";
+WCHAR title[] = L"RunCat Clone 2025.2";
+HINSTANCE instance;
 
-const UINT WM_APP_ANIMATE = WM_APP + 1;
+LRESULT CALLBACK processMessages(HWND window, UINT message, WPARAM w_param, LPARAM l_param);
+NOTIFYICONDATA notification;
+const int icons_length = 5;
+HICON icons[icons_length];
+std::thread thread;
 
-HINSTANCE hInst;
-NOTIFYICONDATA nid;
+void animate();
+bool run_thread = true;
+DWORD sleep_milliseconds = 100;
+double previous_percent = 0;
+UINT64 previous_idle_time = 0;
+UINT64 previous_used_time = 0;
 
-DWORD dwMilliseconds = 100;
-std::wstringstream wss;
+int WINAPI wWinMain(HINSTANCE instance, HINSTANCE not_used, LPWSTR arguments, int show_flag) {
+    HANDLE mutex = CreateMutex(NULL, FALSE, L"RunCat Clone Mutex");
 
-UINT64 previousIdleTime = 0;
-UINT64 previousUsedTime = 0;
-double previousPercent = 0;
-
-LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
-
-int WINAPI wWinMain(
-    _In_ HINSTANCE hInstance,
-    _In_opt_ HINSTANCE hPrevInstance,
-    _In_ LPWSTR lpCmdLine,
-    _In_ int nShowCmd
-)
-{
-    HANDLE hMutex = CreateMutex(NULL, FALSE, L"RunCatCloneMutex");
-
-    if (!hMutex || GetLastError() == ERROR_ALREADY_EXISTS)
-    {
-        MessageBox(NULL, L"RunCat Clone is already running.", szTitle, MB_ICONWARNING);
+    if (!mutex || GetLastError() == ERROR_ALREADY_EXISTS) {
+        MessageBox(NULL, L"RunCat Clone is already running.", title, MB_ICONWARNING);
         return 1;
     }
 
-    hInst = hInstance;
+    ::instance = instance;
+    WCHAR class_name[] = L"RunCat Clone Class";
 
-    WNDCLASS wc{};
-    wc.style = CS_HREDRAW | CS_VREDRAW;
-    wc.lpfnWndProc = WndProc;
-    wc.cbClsExtra = 0;
-    wc.cbWndExtra = 0;
-    wc.hInstance = hInst;
-    wc.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_APP));
-    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hbrBackground = (HBRUSH) (COLOR_WINDOW + 1);
-    wc.lpszMenuName = NULL;
-    wc.lpszClassName = szClass;
+    WNDCLASS window_class{};
+    window_class.style = CS_HREDRAW | CS_VREDRAW;
+    window_class.lpfnWndProc = processMessages;
+    window_class.cbClsExtra = 0;
+    window_class.cbWndExtra = 0;
+    window_class.hInstance = instance;
+    window_class.hIcon = LoadIcon(instance, MAKEINTRESOURCE(IDI_APP));
+    window_class.hCursor = LoadCursor(NULL, IDC_ARROW);
+    window_class.hbrBackground = (HBRUSH) (COLOR_WINDOW + 1);
+    window_class.lpszMenuName = NULL;
+    window_class.lpszClassName = class_name;
 
-    if (!RegisterClass(&wc))
-    {
-        MessageBox(NULL, L"Call to RegisterClass failed.", szTitle, MB_ICONWARNING);
-        return 1;
+    if (!RegisterClass(&window_class)) {
+        MessageBox(NULL, L"Call to RegisterClass failed.", title, MB_ICONWARNING);
+        return 2;
     }
 
-    HWND hwnd = CreateWindow(
-        szClass,
-        szTitle,
+    HWND window = CreateWindow(
+        class_name,
+        title,
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
@@ -71,111 +63,94 @@ int WINAPI wWinMain(
         CW_USEDEFAULT,
         NULL,
         NULL,
-        hInst,
+        instance,
         NULL
     );
 
-    if (!hwnd)
-    {
-        MessageBox(NULL, L"Call to CreateWindow failed.", szTitle, MB_ICONWARNING);
-        return 1;
+    if (!window) {
+        MessageBox(NULL, L"Call to CreateWindow failed.", title, MB_ICONWARNING);
+        return 3;
     }
 
-    ShowWindow(hwnd, SW_HIDE);
-    MSG msg;
+    ShowWindow(window, SW_HIDE);
+    MSG message;
 
-    while (GetMessage(&msg, NULL, 0, 0))
-    {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
+    while (GetMessage(&message, NULL, 0, 0)) {
+        TranslateMessage(&message);
+        DispatchMessage(&message);
     }
 
-    ReleaseMutex(hMutex);
+    ReleaseMutex(mutex);
     return 0;
 }
 
-LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    switch (message)
-    {
+LRESULT CALLBACK processMessages(HWND window, UINT message, WPARAM w_param, LPARAM l_param) {
+    switch (message) {
         case WM_CREATE:
         {
-            nid.cbSize = sizeof(NOTIFYICONDATA);
-            nid.hWnd = hwnd;
-            nid.uFlags = NIF_ICON | NIF_TIP | NIF_SHOWTIP;
-            nid.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_APP));
-            StringCchCopy(nid.szTip, ARRAYSIZE(nid.szTip), szTitle);
-            Shell_NotifyIcon(NIM_ADD, &nid);
+            notification.cbSize = sizeof(NOTIFYICONDATA);
+            notification.hWnd = window;
+            notification.uFlags = NIF_ICON | NIF_TIP | NIF_SHOWTIP;
+            notification.hIcon = LoadIcon(instance, MAKEINTRESOURCE(IDI_APP));
+            StringCchCopy(notification.szTip, ARRAYSIZE(notification.szTip), title);
+            Shell_NotifyIcon(NIM_ADD, &notification);
 
-            nid.uVersion = NOTIFYICON_VERSION_4;
-            Shell_NotifyIcon(NIM_SETVERSION, &nid);
+            notification.uVersion = NOTIFYICON_VERSION_4;
+            Shell_NotifyIcon(NIM_SETVERSION, &notification);
 
-            PostMessage(hwnd, WM_APP_ANIMATE, 0, 0);
-            return 0;
-        }
-        case WM_APP_ANIMATE:
-        {
-            nid.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_WHITE_CAT_0));
-            Shell_NotifyIcon(NIM_MODIFY, &nid);
-            Sleep(dwMilliseconds);
-
-            nid.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_WHITE_CAT_1));
-            Shell_NotifyIcon(NIM_MODIFY, &nid);
-            Sleep(dwMilliseconds);
-
-            nid.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_WHITE_CAT_2));
-            Shell_NotifyIcon(NIM_MODIFY, &nid);
-            Sleep(dwMilliseconds);
-
-            nid.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_WHITE_CAT_3));
-            Shell_NotifyIcon(NIM_MODIFY, &nid);
-            Sleep(dwMilliseconds);
-
-            nid.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_WHITE_CAT_4));
-            Shell_NotifyIcon(NIM_MODIFY, &nid);
-            Sleep(dwMilliseconds);
-
-            FILETIME idleTime, kernelTime, userTime;
-            double currentPercent = previousPercent;
-
-            if (GetSystemTimes(&idleTime, &kernelTime, &userTime))
-            {
-                UINT64 currentIdleTime
-                    = (UINT64) idleTime.dwHighDateTime << 32 | (UINT64) idleTime.dwLowDateTime;
-                UINT64 currentUsedTime
-                    = ((UINT64) kernelTime.dwHighDateTime << 32 | (UINT64) kernelTime.dwLowDateTime)
-                    + ((UINT64) userTime.dwHighDateTime << 32 | (UINT64) userTime.dwLowDateTime);
-
-                UINT64 idleTimeChange = currentIdleTime - previousIdleTime;
-                UINT64 usedTimeChange = currentUsedTime - previousUsedTime;
-
-                currentPercent = (usedTimeChange - idleTimeChange) * 100.0 / usedTimeChange;
-
-                previousIdleTime = currentIdleTime;
-                previousUsedTime = currentUsedTime;
+            for (int index = 0; index < icons_length; index++) {
+                icons[index] = LoadIcon(instance, MAKEINTRESOURCE(IDI_WHITE_CAT_0 + index));
             }
 
-            previousPercent = (previousPercent + currentPercent) / 2;
-            dwMilliseconds = static_cast<DWORD>(2000 / (previousPercent + 20));
-
-            wss << std::fixed << std::setprecision(1) << currentPercent;
-            std::wstring wPercent(wss.str());
-            wss.str(L"");
-            wss.clear();
-            StringCchCopy(nid.szTip, ARRAYSIZE(nid.szTip), (wPercent + L"%").c_str());
-
-            PostMessage(hwnd, WM_APP_ANIMATE, 0, 0);
-            return 0;
+            thread = std::thread(animate);
+            break;
         }
         case WM_DESTROY:
         {
-            Shell_NotifyIcon(NIM_DELETE, &nid);
+            run_thread = false;
+            thread.join();
+
+            Shell_NotifyIcon(NIM_DELETE, &notification);
             PostQuitMessage(0);
-            return 0;
+            break;
         }
         default:
         {
-            return DefWindowProc(hwnd, message, wParam, lParam);
+            return DefWindowProc(window, message, w_param, l_param);
         }
+
+        return 0;
+    }
+}
+
+void animate() {
+    while (run_thread) {
+        for (int index = 0; index < icons_length; index++) {
+            notification.hIcon = icons[index];
+            Shell_NotifyIcon(NIM_MODIFY, &notification);
+            Sleep(sleep_milliseconds);
+        }
+
+        FILETIME idle_time, kernel_time, user_time;
+        double current_cercent = previous_percent;
+
+        if (GetSystemTimes(&idle_time, &kernel_time, &user_time)) {
+            UINT64 current_idle_time
+                = (UINT64) idle_time.dwHighDateTime << 32 | (UINT64) idle_time.dwLowDateTime;
+
+            UINT64 current_used_time
+                = ((UINT64) kernel_time.dwHighDateTime << 32 | (UINT64) kernel_time.dwLowDateTime)
+                + ((UINT64) user_time.dwHighDateTime << 32 | (UINT64) user_time.dwLowDateTime);
+
+            UINT64 idle_time_change = current_idle_time - previous_idle_time;
+            UINT64 used_time_change = current_used_time - previous_used_time;
+            current_cercent = (used_time_change - idle_time_change) * 100.0 / used_time_change;
+
+            previous_idle_time = current_idle_time;
+            previous_used_time = current_used_time;
+        }
+
+        previous_percent = (previous_percent + current_cercent) / 2;
+        sleep_milliseconds = static_cast<DWORD>(2000 / (previous_percent + 20));
     }
 }
