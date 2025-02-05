@@ -16,7 +16,9 @@ LRESULT CALLBACK processMessages(HWND window, UINT message, WPARAM w_param, LPAR
 NOTIFYICONDATA notification;
 const int icons_length = 5;
 HICON icons[icons_length];
+const UINT WM_NOTIFICATION = WM_APP + 1;
 std::thread thread;
+const UINT IDM_CLOSE = 23;
 
 void animate();
 bool run_thread = true;
@@ -90,7 +92,8 @@ LRESULT CALLBACK processMessages(HWND window, UINT message, WPARAM w_param, LPAR
         {
             notification.cbSize = sizeof(NOTIFYICONDATA);
             notification.hWnd = window;
-            notification.uFlags = NIF_ICON | NIF_TIP | NIF_SHOWTIP;
+            notification.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
+            notification.uCallbackMessage = WM_NOTIFICATION;
             notification.hIcon = LoadIcon(instance, MAKEINTRESOURCE(IDI_APP));
             StringCchCopy(notification.szTip, ARRAYSIZE(notification.szTip), title);
             Shell_NotifyIcon(NIM_ADD, &notification);
@@ -103,6 +106,39 @@ LRESULT CALLBACK processMessages(HWND window, UINT message, WPARAM w_param, LPAR
             }
 
             thread = std::thread(animate);
+            break;
+        }
+        case WM_NOTIFICATION:
+        {
+            if (l_param == WM_RBUTTONUP) {
+                POINT cursor;
+                GetCursorPos(&cursor);
+
+                HMENU menu = CreatePopupMenu();
+                AppendMenu(menu, MF_STRING, IDM_CLOSE, L"Close");
+                SetForegroundWindow(window);
+
+                TrackPopupMenu(
+                    menu,
+                    TPM_LEFTALIGN | TPM_BOTTOMALIGN | TPM_RIGHTBUTTON,
+                    cursor.x,
+                    cursor.y,
+                    0,
+                    window,
+                    NULL
+                );
+
+                DestroyMenu(menu);
+            }
+
+            break;
+        }
+        case WM_COMMAND:
+        {
+            if (LOWORD(w_param) == IDM_CLOSE) {
+                DestroyWindow(window);
+            }
+
             break;
         }
         case WM_DESTROY:
